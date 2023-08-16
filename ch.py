@@ -36,7 +36,7 @@ def extract_audio(message):
         audio_clip.write_audiofile(audio_filename, codec='libvorbis')
 
         with open(audio_filename, 'rb') as audio_file:
-            bot.send_audio(chat_id, audio_file, performer="VideoBot")
+            bot.send_voice(chat_id, audio_file)
 
         # Clean up temporary files
         os.remove(video_filename)
