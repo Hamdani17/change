@@ -1,37 +1,65 @@
 import os
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+import requests
+import json
+from io import BytesIO
+from subprocess import run, PIPE
 
 # Replace 'YOUR_TOKEN' with your actual bot token
 TOKEN = '6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g'
 
-def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text("Send a video to extract audio from.")
+def send_message(chat_id, text):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    data = {
+        'chat_id': chat_id,
+        'text': text
+    }
+    response = requests.post(url, data=data)
+    return response.json()
 
-def process_video(update: Update, context: CallbackContext) -> None:
-    # Get the file id of the received video
-    file_id = update.message.video.file_id
+def process_video(file_id, chat_id):
+    url = f"https://api.telegram.org/bot{TOKEN}/getFile"
+    params = {'file_id': file_id}
+    response = requests.get(url, params=params)
+    file_path = response.json()["result"]["file_path"]
+    file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
 
-    # Download the video file
-    video_file = context.bot.get_file(file_id)
-    video_file.download('input_video.mp4')
+    video_data = requests.get(file_url).content
+    with open('input_video.mp4', 'wb') as f:
+        f.write(video_data)
 
-    # Use ffmpeg to extract audio
-    os.system("ffmpeg -i input_video.mp4 -vn -acodec pcm_s16le audio.wav")
+    run(['ffmpeg', '-i', 'input_video.mp4', '-vn', '-acodec', 'pcm_s16le', 'audio.wav'], stdout=PIPE)
 
-    # Send the extracted audio back to the user
     with open('audio.wav', 'rb') as audio:
-        update.message.reply_audio(audio)
+        url = f"https://api.telegram.org/bot{TOKEN}/sendAudio"
+        files = {'audio': ('audio.wav', audio)}
+        data = {
+            'chat_id': chat_id
+        }
+        response = requests.post(url, data=data, files=files)
+
+def handle_message(message):
+    chat_id = message['chat']['id']
+    text = message.get('text', '')
+
+    if text == '/start':
+        send_message(chat_id, "Send a video to extract audio from.")
+    elif 'video' in message:
+        video_file_id = message['video']['file_id']
+        process_video(video_file_id, chat_id)
 
 def main():
-    updater = Updater(token=TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
+    offset = None
+    while True:
+        url = f"https://api.telegram.org/bot{TOKEN}/getUpdates"
+        params = {'offset': offset}
+        response = requests.get(url, params=params)
+        data = response.json()
 
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(MessageHandler(Filters.video, process_video))
-
-    updater.start_polling()
-    updater.idle()
+        if data['ok']:
+            for update in data['result']:
+                offset = update['update_id'] + 1
+                if 'message' in update:
+                    handle_message(update['message'])
 
 if __name__ == '__main__':
     main()
