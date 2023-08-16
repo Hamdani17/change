@@ -1,45 +1,41 @@
-import requests
-import json
+import telebot
+import os
+from pydub import AudioSegment
 
-TOKEN = '6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g'
+# Replace 'YOUR_BOT_TOKEN' with your actual bot token
+bot = telebot.TeleBot('6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g')
 
-def send_message(chat_id, text):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        'chat_id': chat_id,
-        'text': text
-    }
-    response = requests.post(url, json=payload)
-    return response.json()
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_message(message.chat.id, "Hello! Send me a video, and I'll extract and send back the audio.")
 
-def get_file_path(file_id):
-    url = f"https://api.telegram.org/bot{TOKEN}/getFile"
-    payload = {'file_id': file_id}
-    response = requests.get(url, params=payload)
-    data = response.json()
-    file_path = data['result']['file_path']
-    return file_path
+@bot.message_handler(content_types=['video'])
+def handle_video(message):
+    try:
+        # Download the video
+        file_info = bot.get_file(message.video.file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        video_path = 'input_video.mp4'
+        with open(video_path, 'wb') as new_file:
+            new_file.write(downloaded_file)
 
-def download_file(file_path):
-    url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
-    response = requests.get(url)
-    return response.content
+        # Extract audio from the video
+        audio_path = 'extracted_audio.wav'
+        video = AudioSegment.from_file(video_path)
+        audio = video.export(audio_path, format='wav')
 
-def main():
-    # Replace with your logic to receive and parse updates
-    chat_id = 'RECIPIENT_CHAT_ID'  # Replace with the actual recipient's chat ID
-    message = '/start'  # Replace with the received message
+        # Send the extracted audio back
+        bot.send_audio(message.chat.id, audio, title='Extracted Audio')
 
-    if message == '/start':
-        send_message(chat_id, "Please send a video.")
+        # Clean up the temporary files
+        os.remove(video_path)
+        os.remove(audio_path)
+    except Exception as e:
+        bot.send_message(message.chat.id, f"An error occurred: {str(e)}")
 
-        # Replace with your logic to receive and parse updates
-        video_file_id = 'RECEIVED_VIDEO_FILE_ID'  # Replace with the actual received video file ID
+@bot.message_handler(func=lambda message: True)
+def echo(message):
+    bot.reply_to(message, "Send me a video to extract audio!")
 
-        file_path = get_file_path(video_file_id)
-        video_data = download_file(file_path)
-
-        # Here you can process the video_data to extract audio and send it back
-
-if __name__ == "__main__":
-    main()
+# Start the bot
+bot.polling()
