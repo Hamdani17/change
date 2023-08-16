@@ -1,49 +1,37 @@
-import telebot
 import os
-from moviepy.editor import VideoFileClip
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
-# Replace 'YOUR_BOT_TOKEN' with your actual bot token
-bot = telebot.TeleBot('6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g')
+# Replace 'YOUR_TOKEN' with your actual bot token
+TOKEN = '6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g'
 
-waiting_for_video = {}
+def start(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text("Send a video to extract audio from.")
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.send_message(message.chat.id, "Welcome to the video to audio bot! Send /convert to start the conversion.")
+def process_video(update: Update, context: CallbackContext) -> None:
+    # Get the file id of the received video
+    file_id = update.message.video.file_id
 
-@bot.message_handler(commands=['convert'])
-def convert(message):
-    chat_id = message.chat.id
-    bot.send_message(chat_id, "Please send me a video to convert to audio.")
-    waiting_for_video[chat_id] = True
+    # Download the video file
+    video_file = context.bot.get_file(file_id)
+    video_file.download('input_video.mp4')
 
-@bot.message_handler(content_types=['video'])
-def convert_to_audio(message):
-    chat_id = message.chat.id
-    if chat_id in waiting_for_video and waiting_for_video[chat_id]:
-        file_info = bot.get_file(message.video.file_id)
-        file_path = file_info.file_path
-        downloaded_file = bot.download_file(file_path)
+    # Use ffmpeg to extract audio
+    os.system("ffmpeg -i input_video.mp4 -vn -acodec pcm_s16le audio.wav")
 
-        video_filename = 'video.mp4'
-        audio_filename = 'audio.ogg'
+    # Send the extracted audio back to the user
+    with open('audio.wav', 'rb') as audio:
+        update.message.reply_audio(audio)
 
-        with open(video_filename, 'wb') as video_file:
-            video_file.write(downloaded_file)
+def main():
+    updater = Updater(token=TOKEN, use_context=True)
+    dispatcher = updater.dispatcher
 
-        video_clip = VideoFileClip(video_filename)
-        video_clip.audio.write_audiofile(audio_filename)
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(MessageHandler(Filters.video, process_video))
 
-        with open(audio_filename, 'rb') as audio_file:
-            bot.send_audio(chat_id, audio_file)
+    updater.start_polling()
+    updater.idle()
 
-        # Clean up temporary files
-        os.remove(video_filename)
-        os.remove(audio_filename)
-
-        bot.send_message(chat_id, "Here is the audio extracted from the video.")
-        waiting_for_video[chat_id] = False
-    else:
-        bot.send_message(chat_id, "Send /convert to start the conversion first.")
-
-bot.polling()
+if __name__ == '__main__':
+    main()
