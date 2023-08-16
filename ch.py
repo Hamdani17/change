@@ -1,38 +1,38 @@
 import telebot
-import os
-from pydub import AudioSegment
-from io import BytesIO
 
 # Replace 'YOUR_BOT_TOKEN' with your actual bot token
 bot = telebot.TeleBot('6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g')
 
-@bot.message_handler(content_types=['audio'])
-def handle_audio(message):
-    try:
-        # Download the audio file
-        file_info = bot.get_file(message.audio.file_id)
-        file_path = file_info.file_path
-        file_data = bot.download_file(file_path)
-        
-        # Convert audio data to an AudioSegment
-        audio = AudioSegment.from_file(BytesIO(file_data), format="ogg")
-        
-        # Export the audio as WAV
-        wav_path = "temp.wav"
-        audio.export(wav_path, format="wav")
-        
-        # Send the processed voice message
-        voice_message = open(wav_path, 'rb')
-        bot.send_voice(message.chat.id, voice_message)
-        
-        # Clean up temporary files
-        os.remove(wav_path)
-        
-    except Exception as e:
-        bot.reply_to(message, "An error occurred while processing the audio.")
+record_state = {}
 
-@bot.message_handler(func=lambda message: True)
-def handle_other(message):
-    bot.reply_to(message, "Please send an audio message.")
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_message(message.chat.id, "Welcome to the audio recording bot! Send /record to start recording.")
+
+@bot.message_handler(commands=['record'])
+def record(message):
+    chat_id = message.chat.id
+    record_state[chat_id] = True
+    bot.send_message(chat_id, "Send me a voice message to record.")
+
+@bot.message_handler(content_types=['voice'])
+def handle_voice(message):
+    chat_id = message.chat.id
+    if chat_id in record_state and record_state[chat_id]:
+        file_info = bot.get_file(message.voice.file_id)
+        file_path = file_info.file_path
+        downloaded_file = bot.download_file(file_path)
+        
+        voice_filename = 'voice.ogg'
+        with open(voice_filename, 'wb') as voice_file:
+            voice_file.write(downloaded_file)
+        
+        with open(voice_filename, 'rb') as voice_file:
+            bot.send_voice(chat_id, voice_file)
+        
+        bot.send_message(chat_id, "Voice message recorded and sent.")
+        record_state[chat_id] = False
+    else:
+        bot.send_message(chat_id, "Send /record to start recording first.")
 
 bot.polling()
