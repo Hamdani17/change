@@ -2,8 +2,8 @@ from telethon import TelegramClient, events, utils
 from telethon.tl.types import InputFile
 
 # Replace these with your own values
-api_id = 12345678
-api_hash = 'wretyu546uytr567uytr7u'
+api_id = 14858124
+api_hash = 'c5805198008e991a47a32fc4f7c6ec23'
 bot_token = '6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g'
 
 client = TelegramClient('bot_session', api_id, api_hash)
