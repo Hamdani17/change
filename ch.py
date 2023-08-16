@@ -1,96 +1,29 @@
-import asyncio
-import time
-import os
-from datetime import datetime
-from telethon import TelegramClient, events
+import telebot
+import subprocess
 
-# Replace these values with your own
-API_ID = 14858124
-API_HASH = 'c5805198008e991a47a32fc4f7c6ec23'
-BOT_TOKEN = '6664611261:AAHnrFyjH98u77NqDrJkh-WKy-RrVrh-eOA'
-TMP_DOWNLOAD_DIRECTORY = 'downloaded_files'  # Directory to save downloaded files
+# Replace with your actual Telegram bot token
+bot_token = '6664611261:AAHnrFyjH98u77NqDrJkh-WKy-RrVrh-eOA'
+bot = telebot.TeleBot(bot_token)
 
-bot = TelegramClient('bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
+@bot.message_handler(content_types=['video'])
+def handle_video(message):
+    video_file_id = message.video.file_id
+    video_info = bot.get_file(video_file_id)
+    video_path = video_info.file_path
+    video_url = f'https://api.telegram.org/file/bot{bot_token}/{video_path}'
 
-@bot.on(events.NewMessage(pattern=r'^تحويل الى (صوتي|بصمة)$'))
-async def convert_to_audio(event):
-    if not event.reply_to_msg_id:
-        await event.respond("**- يجب عليك الرد على الميديا المراد تحويلها**")
-        return
+    audio_file_path = 'output_audio.ogg'
     
-    reply_message = await event.get_reply_message()
-    if not reply_message.media:
-        await event.respond("**- يجب عليك الرد على الميديا المراد تحويلها**")
-        return
-    
-    input_str = event.pattern_match.group(1)
-    await event.respond("**- جار التحويل انتظر قليلا ...**")
-    
-    try:
-        start = datetime.now()
-        c_time = time.time()
-        downloaded_file_name = await bot.download_media(reply_message, TMP_DOWNLOAD_DIRECTORY)
-    except Exception as e:
-        await event.respond(str(e))
-    else:
-        end = datetime.now()
-        ms = (end - start).seconds
-        await event.respond(
-            f"- تم تنزيل الملف : {downloaded_file_name}\nالوقت المستغرق: {ms} من الثواني"
-        )
-        new_required_file_name = ""
-        command_to_run = []
-        voice_note = False
-        
-        if input_str == "بصمة":
-            new_required_file_name = f"{TMP_DOWNLOAD_DIRECTORY}/voice_{str(round(time.time()))}.opus"
-            command_to_run = [
-                "ffmpeg",
-                "-i",
-                downloaded_file_name,
-                "-map",
-                "0:a",
-                "-codec:a",
-                "libopus",
-                "-b:a",
-                "100k",
-                "-vbr",
-                "on",
-                new_required_file_name,
-            ]
-            voice_note = True
-        elif input_str == "صوتي":
-            new_required_file_name = f"{TMP_DOWNLOAD_DIRECTORY}/mp3_{str(round(time.time()))}.mp3"
-            command_to_run = [
-                "ffmpeg",
-                "-i",
-                downloaded_file_name,
-                "-vn",
-                new_required_file_name,
-            ]
-            voice_note = False
-        else:
-            await event.respond("**- هذه الصيغة غير مدعومة**")
-            os.remove(downloaded_file_name)
-            return
-        
-        process = await asyncio.create_subprocess_exec(
-            *command_to_run,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await process.communicate()
-        os.remove(downloaded_file_name)
-        
-        if os.path.exists(new_required_file_name):
-            await bot.send_file(
-                event.chat_id,
-                new_required_file_name,
-                force_document=False,
-                voice_note=voice_note,
-                reply_to=reply_message.id,
-            )
-            os.remove(new_required_file_name)
+    # Using FFmpeg to extract audio from the video
+    subprocess.call(['ffmpeg', '-i', video_url, '-vn', audio_file_path])
 
-bot.start()
-bot.run_until_disconnected()
+    # Send the extracted audio as a voice message
+    voice = open(audio_file_path, 'rb')
+    bot.send_voice(message.chat.id, voice)
+    voice.close()
+
+    # Clean up the temporary audio file
+    subprocess.call(['rm', audio_file_path])
+
+if __name__ == '__main__':
+    bot.polling()
