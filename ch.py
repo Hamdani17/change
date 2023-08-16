@@ -1,58 +1,58 @@
-import requests
-import json
+import telebot
+from telebot import types
+import os
 
-BOT_TOKEN = '6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g'
-BASE_URL = f'https://api.telegram.org/bot{BOT_TOKEN}'
+# Replace 'YOUR_BOT_TOKEN' with your actual bot token
+bot = telebot.TeleBot('6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g')
 
-def send_message(chat_id, text):
-    url = f'{BASE_URL}/sendMessage'
-    params = {
-        'chat_id': chat_id,
-        'text': text,
-    }
-    response = requests.post(url, json=params)
-    return response.json()
+# Dictionary to store user states (whether they are waiting for a video or not)
+user_states = {}
 
-def get_file_info(file_id):
-    url = f'{BASE_URL}/getFile'
-    params = {
-        'file_id': file_id,
-    }
-    response = requests.get(url, params=params)
-    return response.json()
+@bot.message_handler(commands=['start'])
+def start(message):
+    user_id = message.from_user.id
+    user_states[user_id] = 'waiting_for_video'
+    
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+    item = types.KeyboardButton("Send Video")
+    markup.add(item)
+    
+    bot.send_message(user_id, "Please send a video:", reply_markup=markup)
 
-def download_file(file_path):
-    url = f'https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}'
-    response = requests.get(url)
-    return response.content
+@bot.message_handler(content_types=['video'])
+def handle_video(message):
+    user_id = message.from_user.id
+    if user_id in user_states and user_states[user_id] == 'waiting_for_video':
+        user_states[user_id] = 'not_waiting'
+        
+        file_info = bot.get_file(message.video.file_id)
+        file_path = file_info.file_path
+        
+        video_path = os.path.join("videos", file_path)
+        voice_path = os.path.join("voices", f"{user_id}_voice.ogg")
+        
+        downloaded_file = bot.download_file(file_path)
+        with open(video_path, 'wb') as f:
+            f.write(downloaded_file)
+        
+        os.system(f"ffmpeg -i {video_path} -vn -acodec libopus {voice_path}")
+        
+        voice_file = open(voice_path, 'rb')
+        bot.send_voice(user_id, voice_file)
+        
+        os.remove(video_path)
+        os.remove(voice_path)
+        
+        bot.send_message(user_id, "Here is the voice from the video.")
+    else:
+        bot.send_message(user_id, "Please start with /start to initiate the process.")
 
-def main():
-    offset = None
-    while True:
-        updates_url = f'{BASE_URL}/getUpdates'
-        params = {
-            'offset': offset,
-            'timeout': 30,
-        }
-        response = requests.get(updates_url, params=params)
-        updates = response.json()['result']
+@bot.message_handler(func=lambda message: True)
+def handle_other_messages(message):
+    user_id = message.from_user.id
+    if user_id in user_states and user_states[user_id] == 'waiting_for_video':
+        bot.send_message(user_id, "Please send a video using the provided button.")
+    else:
+        bot.send_message(user_id, "Please start with /start to initiate the process.")
 
-        for update in updates:
-            offset = update['update_id'] + 1
-            message = update.get('message')
-
-            if message and message.get('text') == '/start':
-                send_message(message['chat']['id'], "Please send me a video.")
-            elif message and message.get('video'):
-                video_file_id = message['video']['file_id']
-                file_info = get_file_info(video_file_id)
-                file_path = file_info['result']['file_path']
-                video_data = download_file(file_path)
-                # Process the video data to extract audio
-                # This part requires additional libraries for video processing
-
-                # Send the audio back to the user
-                # You'll need to implement this part as well
-
-if __name__ == "__main__":
-    main()
+bot.polling()
