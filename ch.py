@@ -1,44 +1,35 @@
 import telebot
+from moviepy.editor import VideoFileClip
 import os
 
-# Replace 'YOUR_BOT_TOKEN' with your actual bot token
-bot = telebot.TeleBot('6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g')
+# قم بإدخال توكن البوت الخاص بك هنا
+bot_token = '6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g'
+bot = telebot.TeleBot(bot_token)
 
-record_state = {}
+@bot.message_handler(content_types=['video'])
+def video_to_voice(message):
+    try:
+        video_message = message.video
+        video_info = bot.get_file(video_message.file_id)
+        video_path = video_info.file_path
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.send_message(message.chat.id, "Welcome to the audio recording bot! Send /record to start recording.")
+        video_path_local = 'video.mp4'
+        bot.download_file(video_path, video_path_local)
 
-@bot.message_handler(commands=['record'])
-def record(message):
-    chat_id = message.chat.id
-    record_state[chat_id] = True
-    bot.send_message(chat_id, "Send me a voice message or audio file to record.")
+        video_clip = VideoFileClip(video_path_local)
+        audio_clip = video_clip.audio
+        audio_path = 'audio.ogg'
+        audio_clip.write_audiofile(audio_path, codec='opus')
 
-@bot.message_handler(content_types=['voice', 'audio'])
-def handle_audio(message):
-    chat_id = message.chat.id
-    if chat_id in record_state and record_state[chat_id]:
-        file_info = bot.get_file(message.voice.file_id if message.content_type == 'voice' else message.audio.file_id)
-        file_path = file_info.file_path
-        downloaded_file = bot.download_file(file_path)
-        
-        if message.content_type == 'voice':
-            audio_filename = 'voice.ogg'
-        else:
-            audio_filename = 'audio.ogg'
-        
-        with open(audio_filename, 'wb') as audio_file:
-            audio_file.write(downloaded_file)
-        
-        with open(audio_filename, 'rb') as audio_file:
-            bot.send_audio(chat_id, audio_file)
-        
-        bot.send_message(chat_id, "Audio recorded and sent.")
-        record_state[chat_id] = False
-        os.remove(audio_filename)
-    else:
-        bot.send_message(chat_id, "Send /record to start recording first.")
+        audio = open(audio_path, 'rb')
+        bot.send_voice(message.chat.id, audio)
+
+        audio.close()
+
+        os.remove(video_path_local)
+        os.remove(audio_path)
+
+    except Exception as e:
+        bot.reply_to(message, "حدث خطأ أثناء معالجة الفيديو.")
 
 bot.polling()
