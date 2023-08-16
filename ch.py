@@ -30,12 +30,13 @@ def extract_audio(message):
         with open(video_filename, 'wb') as video_file:
             video_file.write(downloaded_file)
 
-        audio_filename = 'audio.wav'
+        audio_filename = 'audio.ogg'
         video_clip = VideoFileClip(video_filename)
-        video_clip.audio.write_audiofile(audio_filename)
+        audio_clip = video_clip.audio
+        audio_clip.write_audiofile(audio_filename, codec='libvorbis')
 
         with open(audio_filename, 'rb') as audio_file:
-            bot.send_audio(chat_id, audio_file)
+            bot.send_audio(chat_id, audio_file, performer="VideoBot")
 
         # Clean up temporary files
         os.remove(video_filename)
