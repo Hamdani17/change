@@ -1,30 +1,35 @@
-from telethon import TelegramClient, events, utils
-from telethon.tl.types import InputFile
+import telebot
+from pydub import AudioSegment
+from pydub.playback import play
+from io import BytesIO
 
-# Replace these with your own values
-api_id = 14858124
-api_hash = 'c5805198008e991a47a32fc4f7c6ec23'
-bot_token = '6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g'
+# استبدال "TOKEN" بتوكن البوت الخاص بك
+bot = telebot.TeleBot("6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g")
 
-client = TelegramClient('bot_session', api_id, api_hash)
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_message(message.chat.id, "مرحبًا! يرجى إرسال فيديو لتحويله إلى رسالة صوتية.")
 
-@client.on(events.NewMessage(pattern='/start'))
-async def start(event):
-    await event.respond("أرسل لي الفيديو لتحويله إلى رسالة صوتية.")
+@bot.message_handler(content_types=['video'])
+def convert_to_audio(message):
+    chat_id = message.chat.id
+    file_id = message.video.file_id
+    file_info = bot.get_file(file_id)
+    file_path = file_info.file_path
+    
+    video_path = f"https://api.telegram.org/file/botTOKEN/{file_path}"
+    
+    # تحويل الفيديو إلى ملف صوتي
+    video = AudioSegment.from_file(video_path, format="webm")
+    audio = video.set_channels(1).set_frame_rate(16000)
+    
+    # تحويل الصوت إلى بيانات قابلة للإرسال
+    audio_io = BytesIO()
+    audio.export(audio_io, format="ogg")
+    audio_io.seek(0)
+    
+    # إرسال الرسالة الصوتية إلى المستخدم
+    bot.send_voice(chat_id, audio_io, reply_to_message_id=message.message_id)
 
-@client.on(events.NewMessage)
-async def handle_message(event):
-    if event.media and isinstance(event.media, InputFile):
-        video_path = await event.download_media()
-        voice_msg = utils.get_input_document(video_path, voice=True)
-        await event.reply(file=voice_msg)
-    else:
-        await event.respond("الرجاء إرسال فيديو لتحويله إلى رسالة صوتية.")
-
-async def main():
-    await client.start(bot_token=bot_token)
-    await client.run_until_disconnected()
-
-if __name__ == '__main__':
-    import asyncio
-    asyncio.run(main())
+# بدء استماع البوت
+bot.polling()
