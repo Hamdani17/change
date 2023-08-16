@@ -1,35 +1,30 @@
-import telebot
-from moviepy.editor import VideoFileClip
-import os
+from telethon import TelegramClient, events, utils
+from telethon.tl.types import InputFile
 
-# قم بإدخال توكن البوت الخاص بك هنا
+# Replace these with your own values
+api_id = 12345678
+api_hash = 'wretyu546uytr567uytr7u'
 bot_token = '6104906824:AAFfdgn6fUd8DcDMOMkTNZavHYRKAGSSx8g'
-bot = telebot.TeleBot(bot_token)
 
-@bot.message_handler(content_types=['video'])
-def video_to_voice(message):
-    try:
-        video_message = message.video
-        video_info = bot.get_file(video_message.file_id)
-        video_path = video_info.file_path
+client = TelegramClient('bot_session', api_id, api_hash)
 
-        video_path_local = 'video.mp4'
-        bot.download_file(video_path, video_path_local)
+@client.on(events.NewMessage(pattern='/start'))
+async def start(event):
+    await event.respond("أرسل لي الفيديو لتحويله إلى رسالة صوتية.")
 
-        video_clip = VideoFileClip(video_path_local)
-        audio_clip = video_clip.audio
-        audio_path = 'audio.ogg'
-        audio_clip.write_audiofile(audio_path, codec='opus')
+@client.on(events.NewMessage)
+async def handle_message(event):
+    if event.media and isinstance(event.media, InputFile):
+        video_path = await event.download_media()
+        voice_msg = utils.get_input_document(video_path, voice=True)
+        await event.reply(file=voice_msg)
+    else:
+        await event.respond("الرجاء إرسال فيديو لتحويله إلى رسالة صوتية.")
 
-        audio = open(audio_path, 'rb')
-        bot.send_voice(message.chat.id, audio)
+async def main():
+    await client.start(bot_token=bot_token)
+    await client.run_until_disconnected()
 
-        audio.close()
-
-        os.remove(video_path_local)
-        os.remove(audio_path)
-
-    except Exception as e:
-        bot.reply_to(message, "حدث خطأ أثناء معالجة الفيديو.")
-
-bot.polling()
+if __name__ == '__main__':
+    import asyncio
+    asyncio.run(main())
